@@ -1,11 +1,11 @@
 import requests
 import json
 
-cardtoken = "fd4d83f3-5fc9-455c-b3d4-ddac40f7ad04"
-customertoken = "9372dbf4-839a-48f8-89d5-a2b9031a58c1"
-deposittoken = "08b2ea9a-d2b0-4775-9314-e5b1ce10f920"
-loantoken = "45a414b3-dae4-4c7c-902c-48b4ce035535"
-
+cardtoken = "1ae72c89-3a4d-4979-bf1c-026b63826909"
+customertoken = "9d18e7f7-24c2-4eb2-ba8c-30d063489856"
+deposittoken = "f14e68f1-1563-4dbb-8673-60295583db5c"
+loantoken = "e430fcde-7131-4a71-9712-cf676cc4c138"
+taxID1 = "588302286"
 # takes taxID of person, returns json data 
 def customer_profile(taxID):
     url = "https://srvpocanz001.csc-fsg.com/CeleritiCustomersAPI/services/v1/customers/taxID%3D" + taxID + "/profile"
@@ -46,15 +46,17 @@ def transaction_total(data):
     for amts in data["transactionInfo"]:
         total += amts["transactionAmt"]
     return total
-# takes json data, prints separates "product types"
-def accounts(data):
+# takes json data, dict, puts acctnum in dict
+def accounts(data, dicti):
     # Assumming just one card and deposit account
     for product in data["accountInformation"]:
         if product["productCd"] == "DDA":
-            dda_acct_num = parse_accountnbr(product["accountNbr"])
+            dicti["dda"] = parse_accountnbr(product["accountNbr"])
         elif product["productCd"] == "CRD":
-            card_account_num = parse_accountnbr(product["accountNbr"])
-    return dda_acct_num, card_account_num
+            dicti["crd"] = parse_accountnbr(product["accountNbr"])
+        elif product["productCd"] == "CLS":
+            dicti["cls"] = product["accountNbr"]
+    return dicti
 # takes account num, parses the "*"
 def parse_accountnbr(cardnum):
     cn = ""
@@ -98,21 +100,44 @@ def print_dep_trans_total(data):
         curr = trans["tranAmt"]
         print("\tTransaction " + str(trancount) + ": $" + str(curr))
         trancount += 1
+# takes CLS acctnum, loantoken, ret loan info 
+def get_loan_info(acctnum):
+    url = "https://srvpocanz001.csc-fsg.com/CeleritiLoansAPI/services/v1/loanAccounts/" + acctnum
+    querystring = {"companyNbr":"11","productCd":"CLS","extendsFields":"all"}
+    headers = {
+                'authorization': "Bearer " + loantoken,
+                    'cache-control': "no-cache",
+                        'postman-token': "9c77e3ca-4fd0-801b-9850-aab3a9ba6ee9"
+                            }
+
+    response = requests.request("GET", url, headers=headers, params=querystring)
+    data = json.loads(response.text)
+    return data
+# takes loan json, ret amtdue
+def loan_amt_due(data):
+    return data["loanAccountData"]["amountDue"]
 def main():
+    # customer profile
     # Art Venere
-    taxID1 = "588302286"
     profile_data = customer_profile(taxID1)
     # print user name
     name(profile_data)
-    # card info
-    dda_acct_num, card_acctnum = accounts(profile_data)
-    card_transaction_data = card_transactions(card_acctnum)
+    # card info in dict, contains crd, dda, bor, cls
+    acct_num_dict = {}
+    acct_num_dict = accounts(profile_data, acct_num_dict)
+    # loans
+    loan_info = get_loan_info(acct_num_dict["cls"])
+    monthlydue = loan_amt_due(loan_info)
+    print("Amount Due from your loan this month: $" + str(monthlydue))
+    # cards 
+    card_transaction_data = card_transactions(acct_num_dict["crd"])
     trans_total = transaction_total(card_transaction_data)
-    deposit_data = dep_acct_info(dda_acct_num)
+    print("Transaction Total from Total Cards: $" + str(trans_total))
+    # deposit accounts
+    deposit_data = dep_acct_info(acct_num_dict["dda"])
     deposit_balance = get_currentBalance(deposit_data)
-    dep_trans_data = deposit_transactions(dda_acct_num)
+    dep_trans_data = deposit_transactions(acct_num_dict["dda"])
     print_dep_trans_total(dep_trans_data)
     print("Current Balance in Account is: $" + str(deposit_balance))
-    print("Transaction Total from Total Cards: $" + str(trans_total))
 if __name__ == "__main__":
     main()
