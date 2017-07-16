@@ -20,7 +20,7 @@ def customer_profile(taxID):
     data = json.loads(response.text)
     return data
 # takes acctnum returns json data of acct, returns transaction info
-def transactions(acctnum):
+def card_transactions(acctnum):
 
     url = "https://srvpocanz001.csc-fsg.com/CeleritiCardsAPI/services/v1/cardAccounts/" + acctnum + "/transactions"
 
@@ -63,7 +63,7 @@ def parse_accountnbr(cardnum):
             continue;
         cn += cardnum[a:a + 1]
     return cn
-# takes acctnum, deposittoken, returns deposit acct info
+# takes acctnum, returns deposit acct info
 def dep_acct_info(acctnum):
     url = "https://srvpocanz001.csc-fsg.com/CeleritiDepositsAPI/services/v1/depositAccountsDda/" + acctnum
     querystring = {"companyNbr":"11","accountType":"DDA","extendsFields":"all"}
@@ -78,6 +78,26 @@ def dep_acct_info(acctnum):
 # takes json data, parses current balance
 def get_currentBalance(data):
     return data["balancePostingInformation"]["currentBalance"]
+# takes acctnum, returns deposit acct transactions
+def deposit_transactions(acctnum):
+    url = "https://srvpocanz001.csc-fsg.com/CeleritiDepositsAPI/services/v1/depositAccounts/" + acctnum + "/transactions"
+    querystring = {"accountType":"DDA"}
+    headers = {
+                'authorization': "Bearer " + deposittoken,
+                    'cache-control': "no-cache",
+                        'postman-token': "bed14bde-902a-413f-6413-3128c6d5d767"
+                            }
+    response = requests.request("GET", url, headers=headers, params=querystring)
+    data = json.loads(response.text)
+    return data
+# takes deposit acct data, parses each separate deposit
+def print_dep_trans_total(data):
+    trancount = 1
+    print("List of Deposit Transactions: ")
+    for trans in data["transaction"]:
+        curr = trans["tranAmt"]
+        print("\tTransaction " + str(trancount) + ": $" + str(curr))
+        trancount += 1
 def main():
     # Art Venere
     taxID1 = "588302286"
@@ -86,10 +106,12 @@ def main():
     name(profile_data)
     # card info
     dda_acct_num, card_acctnum = accounts(profile_data)
-    transaction_data = transactions(card_acctnum)
-    trans_total = transaction_total(transaction_data)
+    card_transaction_data = card_transactions(card_acctnum)
+    trans_total = transaction_total(card_transaction_data)
     deposit_data = dep_acct_info(dda_acct_num)
     deposit_balance = get_currentBalance(deposit_data)
+    dep_trans_data = deposit_transactions(dda_acct_num)
+    print_dep_trans_total(dep_trans_data)
     print("Current Balance in Account is: $" + str(deposit_balance))
     print("Transaction Total from Total Cards: $" + str(trans_total))
 if __name__ == "__main__":
